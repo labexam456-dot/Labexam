@@ -41,6 +41,9 @@ export interface Question {
   createdDate: string;
   version: number;
   tags: string[];
+  description?: string;
+  estimatedTime?: number;
+  allowedLanguages?: string[];
 }
 
 export interface FacultyProfile {

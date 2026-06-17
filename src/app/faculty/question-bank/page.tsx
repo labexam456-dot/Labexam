@@ -55,11 +55,13 @@ export default function QuestionBank() {
     rowNum: number;
     data: {
       title: string;
-      language: string;
+      subject: string;
       difficulty: "Easy" | "Medium" | "Hard";
-      topic: string;
+      description: string;
       marks: number;
-      tags: string[];
+      estimatedTime: number;
+      allowedLanguages: string[];
+      status: "Active" | "Archived";
     };
     errors: string[];
     isValid: boolean;
@@ -121,14 +123,39 @@ export default function QuestionBank() {
     
     if (lines.length === 0) return [];
     
-    // Header parsing
+    // Header parsing - case-insensitive mapping
     const rawHeaders = lines[0].map(h => h.trim().toLowerCase());
-    const titleIdx = rawHeaders.indexOf("title");
-    const langIdx = rawHeaders.indexOf("language");
-    const diffIdx = rawHeaders.indexOf("difficulty");
-    const topicIdx = rawHeaders.indexOf("topic");
-    const marksIdx = rawHeaders.indexOf("marks");
-    const tagsIdx = rawHeaders.indexOf("tags");
+    
+    const requiredHeaders = [
+      "question title",
+      "course subject",
+      "difficulty rating",
+      "question description",
+      "maximum marks",
+      "estimated completion time",
+      "allowed programming languages",
+      "question status"
+    ];
+    
+    const missingHeaders: string[] = [];
+    requiredHeaders.forEach(req => {
+      if (rawHeaders.indexOf(req) === -1) {
+        missingHeaders.push(req.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "));
+      }
+    });
+    
+    if (missingHeaders.length > 0) {
+      throw new Error(`CSV structure validation failed. Missing required columns: ${missingHeaders.join(", ")}`);
+    }
+
+    const titleIdx = rawHeaders.indexOf("question title");
+    const subjectIdx = rawHeaders.indexOf("course subject");
+    const difficultyIdx = rawHeaders.indexOf("difficulty rating");
+    const descriptionIdx = rawHeaders.indexOf("question description");
+    const marksIdx = rawHeaders.indexOf("maximum marks");
+    const timeIdx = rawHeaders.indexOf("estimated completion time");
+    const langIdx = rawHeaders.indexOf("allowed programming languages");
+    const statusIdx = rawHeaders.indexOf("question status");
 
     const results: ParsedRow[] = [];
     
@@ -138,62 +165,99 @@ export default function QuestionBank() {
       
       const errors: string[] = [];
       const title = titleIdx !== -1 && line[titleIdx] ? line[titleIdx].trim() : "";
-      const language = langIdx !== -1 && line[langIdx] ? line[langIdx].trim() : "";
-      const difficultyRaw = diffIdx !== -1 && line[diffIdx] ? line[diffIdx].trim() : "";
-      const topic = topicIdx !== -1 && line[topicIdx] ? line[topicIdx].trim() : "";
+      const subject = subjectIdx !== -1 && line[subjectIdx] ? line[subjectIdx].trim() : "";
+      const difficultyRaw = difficultyIdx !== -1 && line[difficultyIdx] ? line[difficultyIdx].trim() : "";
+      const description = descriptionIdx !== -1 && line[descriptionIdx] ? line[descriptionIdx].trim() : "";
       const marksRaw = marksIdx !== -1 && line[marksIdx] ? line[marksIdx].trim() : "";
-      const tagsRaw = tagsIdx !== -1 && line[tagsIdx] ? line[tagsIdx].trim() : "";
+      const timeRaw = timeIdx !== -1 && line[timeIdx] ? line[timeIdx].trim() : "";
+      const langRaw = langIdx !== -1 && line[langIdx] ? line[langIdx].trim() : "";
+      const statusRaw = statusIdx !== -1 && line[statusIdx] ? line[statusIdx].trim() : "";
       
       if (!title) {
-        errors.push("Title is required and cannot be empty.");
+        errors.push("Question Title is required and cannot be empty.");
       }
-      if (!language) {
-        errors.push("Language is required and cannot be empty.");
+      if (!subject) {
+        errors.push("Course Subject is required and cannot be empty.");
       }
       
       let difficulty: "Easy" | "Medium" | "Hard" = "Medium";
-      const diffLower = difficultyRaw.toLowerCase();
       if (!difficultyRaw) {
-        errors.push("Difficulty is required.");
-      } else if (diffLower === "easy") {
-        difficulty = "Easy";
-      } else if (diffLower === "medium") {
-        difficulty = "Medium";
-      } else if (diffLower === "hard") {
-        difficulty = "Hard";
+        errors.push("Difficulty Rating is required.");
       } else {
-        errors.push(`Invalid difficulty '${difficultyRaw}'. Must be one of: Easy, Medium, Hard.`);
+        const diffLower = difficultyRaw.toLowerCase();
+        if (diffLower === "easy") {
+          difficulty = "Easy";
+        } else if (diffLower === "medium") {
+          difficulty = "Medium";
+        } else if (diffLower === "hard") {
+          difficulty = "Hard";
+        } else {
+          errors.push(`Invalid Difficulty Rating '${difficultyRaw}'. Must be one of: Easy, Medium, Hard.`);
+        }
       }
       
-      if (!topic) {
-        errors.push("Topic is required.");
+      if (!description) {
+        errors.push("Question Description is required and cannot be empty.");
       }
       
       let marks = 0;
       if (!marksRaw) {
-        errors.push("Marks is required.");
+        errors.push("Maximum Marks is required.");
       } else {
         const parsedMarks = Number(marksRaw);
         if (isNaN(parsedMarks) || parsedMarks <= 0) {
-          errors.push(`Invalid marks '${marksRaw}'. Must be a positive number.`);
+          errors.push(`Invalid Maximum Marks '${marksRaw}'. Must be a positive number.`);
         } else {
           marks = Math.floor(parsedMarks);
         }
       }
+
+      let estimatedTime = 0;
+      if (!timeRaw) {
+        errors.push("Estimated Completion Time is required.");
+      } else {
+        const cleanTime = timeRaw.replace(/[^0-9.]/g, "");
+        const parsedTime = Number(cleanTime);
+        if (isNaN(parsedTime) || parsedTime <= 0) {
+          errors.push(`Invalid Estimated Completion Time '${timeRaw}'. Must be a positive integer.`);
+        } else {
+          estimatedTime = Math.floor(parsedTime);
+        }
+      }
+
+      let allowedLanguages: string[] = [];
+      if (!langRaw) {
+        errors.push("Allowed Programming Languages is required.");
+      } else {
+        allowedLanguages = langRaw.split(/[,;\/|]/).map(l => l.trim()).filter(Boolean);
+        if (allowedLanguages.length === 0) {
+          errors.push("Allowed Programming Languages must contain at least one language.");
+        }
+      }
+
+      let status: "Active" | "Archived" = "Active";
+      if (statusRaw) {
+        const statusLower = statusRaw.toLowerCase();
+        if (statusLower === "active") {
+          status = "Active";
+        } else if (statusLower === "archived" || statusLower === "inactive") {
+          status = "Archived";
+        } else {
+          errors.push(`Invalid Question Status '${statusRaw}'. Must be Active or Archived.`);
+        }
+      }
       
-      const tags = tagsRaw 
-        ? tagsRaw.split(/[;,]/).map(t => t.trim()).filter(Boolean) 
-        : [];
-        
       results.push({
         rowNum: r + 1,
         data: {
           title,
-          language,
+          subject,
           difficulty,
-          topic,
+          description,
           marks,
-          tags
+          estimatedTime,
+          allowedLanguages,
+          status
         },
         errors,
         isValid: errors.length === 0
@@ -207,10 +271,10 @@ export default function QuestionBank() {
     setValidationError(null);
     if (!file.name.toLowerCase().endsWith(".csv")) {
       setValidationError("File format not supported. Please select a valid CSV file.");
+      setUploadedFile(null);
       return;
     }
     
-    setUploadedFile(file);
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -219,11 +283,15 @@ export default function QuestionBank() {
         if (results.length === 0) {
           setValidationError("The uploaded CSV file contains no question records.");
           setParsedRows([]);
+          setUploadedFile(null);
         } else {
+          setUploadedFile(file);
           setParsedRows(results);
         }
-      } catch (err) {
-        setValidationError("Failed to parse CSV file. Please verify file integrity.");
+      } catch (err: any) {
+        setValidationError(err.message || "Failed to parse CSV file. Please verify file integrity.");
+        setParsedRows([]);
+        setUploadedFile(null);
       }
     };
     reader.readAsText(file);
@@ -231,11 +299,11 @@ export default function QuestionBank() {
 
   const handleDownloadSample = () => {
     const csvContent = [
-      "Title,Language,Difficulty,Topic,Marks,Tags",
-      'Invert a Binary Tree,C++,Medium,Data Structures,15,"Trees, Recursion"',
-      'Fibonacci Sequence,Python,Easy,Recursion,10,"Recursion, Python"',
-      'Validate Binary Search Tree,Java,Medium,Data Structures,15,"Trees, BST"',
-      'Implement Dijkstra shortest path,C++,Hard,Algorithms,20,"Graphs, Shortest Path"'
+      "Question Title,Course Subject,Difficulty Rating,Question Description,Maximum Marks,Estimated Completion Time,Allowed Programming Languages,Question Status",
+      'Invert a Binary Tree,Data Structures,Medium,"Given the root of a binary tree, invert the tree (swap left and right subtrees of every node) and return its root.",15,30,"C++, Java, Python",Active',
+      'Fibonacci Sequence,Recursion,Easy,"Write a recursive function to compute the Nth Fibonacci number.",10,15,"Python, Java, C++",Active',
+      'Validate Binary Search Tree,Data Structures,Medium,"Given the root of a binary tree, determine if it is a valid binary search tree (BST).",15,25,"Java, Python",Active',
+      'Implement Dijkstra Shortest Path,Algorithms,Hard,"Given a weighted graph, find the shortest path from a source vertex S to all other vertices.",20,45,"C++, Java",Active'
     ].join("\n");
     
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -254,16 +322,18 @@ export default function QuestionBank() {
     const invalid = parsedRows.filter(r => !r.isValid);
     if (invalid.length === 0) return;
     
-    const csvHeaders = "Row,Title,Language,Difficulty,Topic,Marks,Tags,Errors\n";
+    const csvHeaders = "Row,Question Title,Course Subject,Difficulty Rating,Question Description,Maximum Marks,Estimated Completion Time,Allowed Programming Languages,Question Status,Errors\n";
     const csvContent = invalid.map(r => {
-      const titleEscaped = `"${r.data.title.replace(/"/g, '""')}"`;
-      const langEscaped = `"${r.data.language.replace(/"/g, '""')}"`;
-      const diffEscaped = `"${r.data.difficulty.replace(/"/g, '""')}"`;
-      const topicEscaped = `"${r.data.topic.replace(/"/g, '""')}"`;
-      const marksEscaped = r.data.marks;
-      const tagsEscaped = `"${r.data.tags.join(", ").replace(/"/g, '""')}"`;
+      const titleEscaped = `"${(r.data.title || "").replace(/"/g, '""')}"`;
+      const subjectEscaped = `"${(r.data.subject || "").replace(/"/g, '""')}"`;
+      const diffEscaped = `"${(r.data.difficulty || "").replace(/"/g, '""')}"`;
+      const descEscaped = `"${(r.data.description || "").replace(/"/g, '""')}"`;
+      const marksEscaped = r.data.marks || "";
+      const timeEscaped = r.data.estimatedTime || "";
+      const langEscaped = `"${(r.data.allowedLanguages || []).join(", ").replace(/"/g, '""')}"`;
+      const statusEscaped = `"${(r.data.status || "").replace(/"/g, '""')}"`;
       const errorsEscaped = `"${r.errors.join("; ").replace(/"/g, '""')}"`;
-      return `${r.rowNum},${titleEscaped},${langEscaped},${diffEscaped},${topicEscaped},${marksEscaped},${tagsEscaped},${errorsEscaped}`;
+      return `${r.rowNum},${titleEscaped},${subjectEscaped},${diffEscaped},${descEscaped},${marksEscaped},${timeEscaped},${langEscaped},${statusEscaped},${errorsEscaped}`;
     }).join("\n");
     
     const blob = new Blob([csvHeaders + csvContent], { type: "text/csv;charset=utf-8;" });
@@ -288,20 +358,23 @@ export default function QuestionBank() {
     const newQuestions: Question[] = valid.map((row, idx) => ({
       id: (Date.now() + idx).toString(),
       title: row.data.title,
-      language: row.data.language,
+      language: row.data.allowedLanguages.join(", "),
       difficulty: row.data.difficulty,
       marks: row.data.marks,
-      topic: row.data.topic,
+      topic: row.data.subject,
       lastUpdated: new Date().toISOString().split("T")[0],
-      status: "Active",
+      status: row.data.status,
       timesUsed: 0,
       avgScore: "N/A",
       successRate: "N/A",
-      avgTime: "N/A",
+      avgTime: `${row.data.estimatedTime}m`,
       createdBy: faculty.fullName || "Faculty HOD",
       createdDate: new Date().toISOString().split("T")[0],
       version: 1,
-      tags: row.data.tags
+      tags: [row.data.subject, row.data.difficulty],
+      description: row.data.description,
+      estimatedTime: row.data.estimatedTime,
+      allowedLanguages: row.data.allowedLanguages
     }));
     
     const updated = [...newQuestions, ...questions];
@@ -382,13 +455,13 @@ export default function QuestionBank() {
             onClick={() => setShowImportModal(true)}
             className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold px-3 py-2 rounded-md flex items-center gap-1.5 transition-all focus-ring"
           >
-            <Upload className="w-3.5 h-3.5 text-slate-500" /> Import CSV
+            <Upload className="w-3.5 h-3.5 text-slate-500" /> Upload CSV
           </button>
           <Link 
             href="/faculty/question-bank/create"
             className="bg-navy-900 hover:bg-navy-950 text-white font-bold px-4 py-2 rounded-md flex items-center gap-1.5 transition-all focus-ring"
           >
-            <Plus className="w-3.5 h-3.5" /> Create Question
+            <Plus className="w-3.5 h-3.5" /> Add Question
           </Link>
         </div>
       </header>
@@ -778,7 +851,7 @@ export default function QuestionBank() {
 
               <div className="px-6 pt-6 pb-4 border-b border-slate-100 bg-slate-50/50">
                 <span className="text-[10px] font-bold text-navy-800 tracking-wider uppercase">CSV Bulk Uploader</span>
-                <h3 className="text-base font-bold text-slate-900 mt-1">Import Questions Spreadsheet</h3>
+                <h3 className="text-base font-bold text-slate-900 mt-1">Upload Questions Spreadsheet</h3>
               </div>
 
               <div className="p-6 space-y-4">
@@ -819,7 +892,7 @@ export default function QuestionBank() {
                         }
                       }}
                       onClick={() => fileInputRef.current?.click()}
-                      className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${
+                      className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${
                         isDragActive 
                           ? "border-blue-500 bg-blue-50/30" 
                           : "border-slate-200 hover:border-slate-350 bg-slate-50"
@@ -827,8 +900,20 @@ export default function QuestionBank() {
                     >
                       <FileSpreadsheet className={`w-8 h-8 mb-2 transition-colors ${isDragActive ? "text-blue-500" : "text-slate-400"}`} />
                       <p className="font-bold text-slate-700 text-xs">Drag and drop your CSV file here</p>
-                      <p className="text-[10px] text-slate-400 mt-1">or click to browse local folders</p>
-                      <span className="text-[8px] font-bold text-slate-500 mt-2 uppercase tracking-wide bg-slate-200/60 border border-slate-300 px-2 py-0.5 rounded">
+                      <p className="text-[10px] text-slate-400 mt-1">or use the button below to browse</p>
+                      
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          fileInputRef.current?.click();
+                        }}
+                        className="mt-3 bg-navy-900 hover:bg-navy-950 text-white font-bold px-3 py-1.5 rounded-md transition-all text-[10px] shadow-sm"
+                      >
+                        Choose File
+                      </button>
+
+                      <span className="text-[8px] font-bold text-slate-500 mt-3.5 uppercase tracking-wide bg-slate-200/60 border border-slate-300 px-2 py-0.5 rounded">
                         .csv only supported
                       </span>
                     </div>
@@ -841,16 +926,18 @@ export default function QuestionBank() {
                     )}
 
                     {/* Template details */}
-                    <div className="bg-slate-50 p-3 rounded border border-slate-150 space-y-1.5 text-[10px] text-slate-650">
+                    <div className="bg-slate-50 p-3 rounded border border-slate-150 space-y-2.5 text-[10px] text-slate-650">
                       <p className="font-bold text-slate-800 uppercase tracking-wider text-[9px]">Required Columns Schema:</p>
-                      <p className="font-mono text-slate-500 border-b border-slate-200 pb-1.5">
-                        Title, Language, Difficulty, Topic, Marks, Tags
-                      </p>
+                      <div className="bg-slate-100 p-2 rounded border border-slate-250 font-mono text-[8.5px] text-slate-600 break-words leading-relaxed">
+                        Question Title, Course Subject, Difficulty Rating, Question Description, Maximum Marks, Estimated Completion Time, Allowed Programming Languages, Question Status
+                      </div>
+                      
                       <button 
+                        type="button"
                         onClick={handleDownloadSample}
-                        className="text-navy-900 font-extrabold hover:underline flex items-center gap-1 mt-1 font-sans"
+                        className="w-full bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-extrabold py-2 rounded-md flex items-center justify-center gap-1.5 transition-all text-[10px]"
                       >
-                        <Download className="w-3.5 h-3.5" /> Download CSV Schema Template
+                        <Download className="w-3.5 h-3.5 text-slate-500" /> Download Sample CSV
                       </button>
                     </div>
                   </>
@@ -948,7 +1035,7 @@ export default function QuestionBank() {
                       : "bg-navy-900 hover:bg-navy-950"
                   }`}
                 >
-                  Import Valid Questions {validCount > 0 ? `(${validCount})` : ""}
+                  Upload {validCount > 0 ? `(${validCount} Valid)` : ""}
                 </button>
               </div>
 
@@ -982,6 +1069,49 @@ export default function QuestionBank() {
             {/* Scrollable details */}
             <div className="p-6 space-y-6 overflow-y-auto flex-1">
               
+              {/* Question Description */}
+              {selectedQuestion.description && (
+                <div className="space-y-2">
+                  <h4 className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1.5">
+                    Question Description
+                  </h4>
+                  <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
+                    {selectedQuestion.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Academic Parameters */}
+              <div className="space-y-3">
+                <h4 className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1.5">
+                  Academic Parameters
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="bg-slate-50 p-2.5 border border-slate-150 rounded-md">
+                    <p className="text-slate-400 font-semibold uppercase text-[9px]">Course Subject</p>
+                    <p className="font-bold text-slate-800 mt-0.5">{selectedQuestion.topic}</p>
+                  </div>
+                  <div className="bg-slate-50 p-2.5 border border-slate-150 rounded-md">
+                    <p className="text-slate-400 font-semibold uppercase text-[9px]">Difficulty Rating</p>
+                    <p className="font-bold text-slate-800 mt-0.5">{selectedQuestion.difficulty}</p>
+                  </div>
+                  <div className="bg-slate-50 p-2.5 border border-slate-150 rounded-md">
+                    <p className="text-slate-400 font-semibold uppercase text-[9px]">Maximum Marks</p>
+                    <p className="font-bold text-slate-800 mt-0.5">{selectedQuestion.marks} Marks</p>
+                  </div>
+                  <div className="bg-slate-50 p-2.5 border border-slate-150 rounded-md">
+                    <p className="text-slate-400 font-semibold uppercase text-[9px]">Est. Completion Time</p>
+                    <p className="font-bold text-slate-800 mt-0.5">{selectedQuestion.avgTime}</p>
+                  </div>
+                  <div className="bg-slate-50 p-2.5 border border-slate-150 rounded-md col-span-2">
+                    <p className="text-slate-400 font-semibold uppercase text-[9px]">Allowed Programming Languages</p>
+                    <p className="font-bold text-slate-800 mt-0.5">
+                      {selectedQuestion.allowedLanguages?.join(", ") || selectedQuestion.language}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Usage analytics section */}
               <div className="space-y-3">
                 <h4 className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
