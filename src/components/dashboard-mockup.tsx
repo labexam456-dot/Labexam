@@ -468,9 +468,7 @@ export default function DashboardMockup() {
             NBA/NAAC Compliant Reporting
           </span>
         </div>
-        <div>
-          <span className="text-slate-900 font-semibold">Active Session:</span> 2026-Summer-Labs
-        </div>
+
       </div>
     </div>
   );
