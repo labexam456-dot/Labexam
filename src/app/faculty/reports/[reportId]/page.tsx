@@ -361,11 +361,11 @@ export default function ReportDetailsPage({ params }: PageProps) {
       csvContent += `"${dynamicSummary.passRate}","${dynamicSummary.avgScore}","${dynamicSummary.highest}","${dynamicSummary.lowest}","${dynamicSummary.submitRate}"\n`;
     }
 
-    // Generate blob and trigger click download
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    // Generate blob and trigger click download (prepend UTF-8 BOM so Excel decodes it properly, and use .csv extension to prevent zip format corruption errors)
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const filename = `${report.name.replace(/\s+/g, "_")}_export.${format === "CSV" ? "csv" : "xlsx"}`;
+    const filename = `${report.name.replace(/\s+/g, "_")}_export.csv`;
     
     link.setAttribute("href", url);
     link.setAttribute("download", filename);
