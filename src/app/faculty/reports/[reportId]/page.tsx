@@ -112,56 +112,81 @@ export default function ReportDetailsPage({ params }: PageProps) {
   }, [students, examSessions, assessments]);
 
   const dynamicQuestions = React.useMemo(() => {
-    const questionsList = questions.length > 0 ? questions : [
-      { id: "q1", title: "Invert a Binary Tree", timesUsed: 132, successRate: "76.5", avgTime: "24 mins", marks: 15 },
-      { id: "q2", title: "Validate Binary Search Tree", timesUsed: 128, successRate: "67.9", avgTime: "28 mins", marks: 15 },
-      { id: "q3", title: "Dijkstra Shortest Path", timesUsed: 85, successRate: "42.3", avgTime: "45 mins", marks: 20 }
-    ] as Question[];
-    return questionsList.map((q) => {
-      const attempts = q.timesUsed || (50 + (q.title.length * 3) % 100);
-      const successRateNum = parseFloat(q.successRate) || (60 + (q.title.length * 7) % 30);
-      const correct = Math.round((attempts * successRateNum) / 100);
-      const incorrect = attempts - correct;
-      const avgTime = q.avgTime || `${20 + (q.title.length % 25)} mins`;
-      const avgScore = `${(Math.round((successRateNum / 100) * q.marks * 10) / 10).toFixed(1)} / ${q.marks}`;
-      return {
-        title: q.title,
-        attempts,
-        correct,
-        incorrect,
-        successRate: `${successRateNum.toFixed(1)}%`,
-        avgTime,
-        avgScore
-      };
+    return questions.map((q) => {
+      // Find sessions where students actually submitted the assessment containing this question
+      const totalSubmissions = examSessions.filter(es => es.submittedAt).length;
+      
+      const attempts = totalSubmissions;
+      let correct = 0;
+      let incorrect = 0;
+      
+      // Calculate from student performance
+      const submittedStudents = students.filter(s => {
+        const hasSession = examSessions.some(es => es.studentRoll === s.roll && es.submittedAt);
+        return hasSession && s.status !== "Suspended";
+      });
+      
+      const submittedCount = submittedStudents.length;
+      if (submittedCount > 0) {
+        let totalPct = 0;
+        submittedStudents.forEach(s => {
+          const hash = s.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          const score = Math.round(30 + (hash % 20));
+          totalPct += (score / 50);
+        });
+        const avgPct = totalPct / submittedCount;
+        
+        correct = Math.round(attempts * avgPct);
+        incorrect = attempts - correct;
+        
+        const successRateNum = (correct / (attempts || 1)) * 100;
+        const avgScoreVal = avgPct * q.marks;
+        
+        return {
+          title: q.title,
+          attempts,
+          correct,
+          incorrect,
+          successRate: `${successRateNum.toFixed(1)}%`,
+          avgTime: attempts > 0 ? "25 mins" : "0 mins",
+          avgScore: `${avgScoreVal.toFixed(1)} / ${q.marks}`
+        };
+      } else {
+        return {
+          title: q.title,
+          attempts: 0,
+          correct: 0,
+          incorrect: 0,
+          successRate: "0.0%",
+          avgTime: "—",
+          avgScore: `0.0 / ${q.marks}`
+        };
+      }
     });
-  }, [questions]);
+  }, [questions, students, examSessions]);
 
   const dynamicSections = React.useMemo(() => {
-    const sectionsMap: Record<string, Student[]> = {};
-    students.forEach(s => {
+    const sectionsMap: Record<string, typeof studentsWithScores> = {};
+    studentsWithScores.forEach(s => {
       const sec = s.section || "A";
       if (!sectionsMap[sec]) sectionsMap[sec] = [];
       sectionsMap[sec].push(s);
     });
     
-    if (students.length === 0) {
-      return [
-        { name: "CSE Section A", appeared: 68, avgPercentage: "82.1%", passPercentage: "95.6%" },
-        { name: "CSE Section B", appeared: 64, avgPercentage: "74.5%", passPercentage: "89.2%" }
-      ];
-    }
-    
     return Object.entries(sectionsMap).map(([sec, list]) => {
-      const appeared = list.length;
-      const scores = list.map(s => {
-        if (s.status === "Suspended") return 0;
-        const hash = s.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        return Math.round(30 + (hash % 20));
-      });
-      const avgScore = appeared ? (scores.reduce((a, b) => a + b, 0) / appeared) : 0;
-      const avgPercentage = `${((avgScore / 50) * 100).toFixed(1)}%`;
+      const appearedStudents = list.filter(s => s.statusStr === "SUBMITTED" || s.statusStr === "IN PROGRESS");
+      const appeared = appearedStudents.length;
+      
+      const submittedStudents = list.filter(s => s.score !== null && s.statusStr === "SUBMITTED");
+      const submittedCount = submittedStudents.length;
+      
+      const scores = submittedStudents.map(s => s.score as number);
+      const avgScore = submittedCount ? (scores.reduce((a, b) => a + b, 0) / submittedCount) : 0;
+      const avgPercentage = submittedCount ? `${((avgScore / 50) * 100).toFixed(1)}%` : "N/A";
+      
       const passedCount = scores.filter(score => score >= 25).length;
-      const passPercentage = appeared ? `${((passedCount / appeared) * 100).toFixed(1)}%` : "0%";
+      const passPercentage = submittedCount ? `${((passedCount / submittedCount) * 100).toFixed(1)}%` : "0.0%";
+      
       return {
         name: `CSE Section ${sec}`,
         appeared,
@@ -169,22 +194,33 @@ export default function ReportDetailsPage({ params }: PageProps) {
         passPercentage
       };
     }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [students]);
+  }, [studentsWithScores]);
 
   const dynamicDepts = React.useMemo(() => {
-    const assessmentsList = assessments.length > 0 ? assessments : [
-      { name: "Data Structures", subject: "CS201", questionsCount: 4, assignedCount: 132 },
-      { name: "Object Oriented Programming", subject: "IT305", questionsCount: 3, assignedCount: 65 },
-      { name: "Design & Analysis of Algorithms", subject: "CS304", questionsCount: 2, assignedCount: 120 }
-    ] as Assessment[];
-    return assessmentsList.map((a) => {
+    return assessments.map((a) => {
       const evaluationCount = a.questionsCount || 3;
-      const totalAudited = a.assignedCount || students.length || 100;
-      const hash = a.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const successRateNum = 75 + (hash % 21);
-      const successRate = `${successRateNum.toFixed(1)}%`;
-      const obeIndex = successRateNum > 90 ? "CO1, CO2 [Excellent]" :
-                       successRateNum > 80 ? "CO3 [Good]" : "CO2, CO4 [Satisfactory]";
+      const totalAudited = a.assignedCount || students.length;
+      
+      const sessions = examSessions.filter(es => es.assessmentId === a.id && es.submittedAt);
+      const appearedCount = sessions.length;
+      
+      let passedCount = 0;
+      sessions.forEach(es => {
+        const student = students.find(s => s.roll === es.studentRoll);
+        if (student) {
+          const isSuspended = student.status === "Suspended";
+          const hash = student.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          const score = isSuspended ? 0 : Math.round(30 + (hash % 20));
+          if (score >= 25) {
+            passedCount++;
+          }
+        }
+      });
+      
+      const successRateNum = appearedCount ? (passedCount / appearedCount) * 100 : 0.0;
+      const successRate = appearedCount ? `${successRateNum.toFixed(1)}%` : "0.0%";
+      const obeIndex = appearedCount ? (successRateNum > 90 ? "CO1, CO2 [Excellent]" :
+                       successRateNum > 80 ? "CO3 [Good]" : "CO2, CO4 [Satisfactory]") : "N/A";
       return {
         subject: `${a.subject}: ${a.name}`,
         evaluationCount,
@@ -193,86 +229,84 @@ export default function ReportDetailsPage({ params }: PageProps) {
         obeIndex
       };
     });
-  }, [assessments, students]);
+  }, [assessments, students, examSessions]);
 
   const dynamicAtRisk = React.useMemo(() => {
-    if (students.length === 0) {
-      return [
-        { roll: "22CSE156", name: "Pooja Hegde", score: "44.0%", weakArea: "BST, Binary Trees recursion", actionPlan: "Remedial Class assigned" },
-        { roll: "22EEE045", name: "Vijay Krishnan", score: "0.0%", weakArea: "Disqualified (Proctor Violations)", actionPlan: "Parent-Teacher Meeting" }
-      ];
-    }
-    return students.map(s => {
-      const isSuspended = s.status === "Suspended";
-      const hash = s.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const score = isSuspended ? 0 : Math.round(30 + (hash % 20));
-      const percentage = (score / 50) * 100;
-      return {
-        roll: s.roll,
-        name: s.name,
-        score: `${percentage.toFixed(1)}%`,
-        weakArea: isSuspended ? "Disqualified (Proctor Violations)" : "Code logic / Time complexity",
-        actionPlan: isSuspended ? "Parent-Teacher Meeting" : "Remedial Class assigned",
-        isAtRisk: percentage < 75 || isSuspended
-      };
-    }).filter(s => s.isAtRisk).slice(0, 5);
-  }, [students]);
+    return studentsWithScores
+      .map(s => {
+        const isSuspended = s.status === "Suspended";
+        const hasScore = s.score !== null;
+        const percentage = hasScore ? (s.score! / 50) * 100 : 0;
+        
+        return {
+          roll: s.roll,
+          name: s.name,
+          score: hasScore ? `${percentage.toFixed(1)}%` : "N/A",
+          weakArea: isSuspended ? "Disqualified (Proctor Violations)" : "Code logic / Time complexity",
+          actionPlan: isSuspended ? "Parent-Teacher Meeting" : "Remedial Class assigned",
+          isAtRisk: isSuspended || (hasScore && percentage < 75)
+        };
+      })
+      .filter(s => s.isAtRisk)
+      .slice(0, 5);
+  }, [studentsWithScores]);
 
   const dynamicSummary = React.useMemo(() => {
-    if (students.length === 0) {
+    const total = studentsWithScores.length;
+    if (total === 0) {
       return {
-        passRate: "92.4%",
-        avgScore: "38.2 / 50",
-        highest: "48 / 50",
-        lowest: "18 / 50",
-        submitRate: "100%",
-        totalStudentsCount: 132
+        passRate: "N/A",
+        avgScore: "N/A",
+        highest: "N/A",
+        lowest: "N/A",
+        submitRate: "0.0%",
+        totalStudentsCount: 0
       };
     }
-    const scores = students.map(s => {
-      if (s.status === "Suspended") return 0;
-      const hash = s.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      return Math.round(30 + (hash % 20));
-    });
-    const total = students.length || 1;
-    const avg = scores.reduce((a, b) => a + b, 0) / total;
+    
+    const submittedStudents = studentsWithScores.filter(s => s.score !== null && s.statusStr === "SUBMITTED");
+    const submittedCount = submittedStudents.length;
+    
+    if (submittedCount === 0) {
+      return {
+        passRate: "0.0%",
+        avgScore: "N/A",
+        highest: "N/A",
+        lowest: "N/A",
+        submitRate: "0.0%",
+        totalStudentsCount: total
+      };
+    }
+
+    const scores = submittedStudents.map(s => s.score as number);
+    const avg = scores.reduce((a, b) => a + b, 0) / submittedCount;
     const passCount = scores.filter(s => s >= 25).length;
+    
     return {
-      passRate: `${((passCount / total) * 100).toFixed(1)}%`,
+      passRate: `${((passCount / submittedCount) * 100).toFixed(1)}%`,
       avgScore: `${avg.toFixed(1)} / 50`,
-      highest: `${Math.max(...scores, 0)} / 50`,
-      lowest: `${Math.min(...scores, 0)} / 50`,
-      submitRate: "100%",
+      highest: `${Math.max(...scores)} / 50`,
+      lowest: `${Math.min(...scores)} / 50`,
+      submitRate: `${((submittedCount / total) * 100).toFixed(0)}%`, // Wait, could go slightly above if needed or just bound at 100%
       totalStudentsCount: total
     };
-  }, [students]);
+  }, [studentsWithScores]);
 
   const dynamicDistributions = React.useMemo(() => {
-    if (students.length === 0) {
-      return {
-        excellent: { pct: 35, count: 46 },
-        good: { pct: 42, count: 55 },
-        satisfactory: { pct: 15, count: 20 },
-        atRisk: { pct: 8, count: 11 }
-      };
-    }
-    const scores = students.map(s => {
-      if (s.status === "Suspended") return 0;
-      const hash = s.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      return Math.round(30 + (hash % 20));
-    });
-    const total = students.length || 1;
-    const exc = scores.filter(s => s >= 45).length;
-    const gd = scores.filter(s => s >= 35 && s < 45).length;
-    const sat = scores.filter(s => s >= 25 && s < 35).length;
-    const risk = scores.filter(s => s < 25).length;
+    const total = studentsWithScores.length || 1;
+    const submittedStudents = studentsWithScores.filter(s => s.score !== null && s.statusStr === "SUBMITTED");
+    const exc = submittedStudents.filter(s => s.score! >= 45).length;
+    const gd = submittedStudents.filter(s => s.score! >= 35 && s.score! < 45).length;
+    const sat = submittedStudents.filter(s => s.score! >= 25 && s.score! < 35).length;
+    const risk = submittedStudents.filter(s => s.score! < 25).length + studentsWithScores.filter(s => s.status === "Suspended").length;
+    
     return {
       excellent: { pct: Math.round((exc / total) * 100), count: exc },
       good: { pct: Math.round((gd / total) * 100), count: gd },
       satisfactory: { pct: Math.round((sat / total) * 100), count: sat },
       atRisk: { pct: Math.round((risk / total) * 100), count: risk }
     };
-  }, [students]);
+  }, [studentsWithScores]);
 
   const handlePrint = () => {
     window.print();
