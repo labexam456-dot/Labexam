@@ -165,6 +165,90 @@ const formatDate = (date: Date) => {
   return `${day}/${month}/${year}, ${hours}:${minutes}:${seconds} ${ampm}`;
 };
 
+function isCodeCorrect(qTitle: string, code: string): boolean {
+  if (!code || code.trim() === "") return false;
+  
+  // Basic Syntax checks
+  if (/\bprint\s+[^(\s]/.test(code)) return false; // Python 3 print syntax error
+
+  const cleanTitle = qTitle.toLowerCase();
+  
+  if (cleanTitle.includes("reverse each word")) {
+    return code.includes(".split") && (code.includes("[::-1]") || code.includes("reverse"));
+  }
+  if (cleanTitle.includes("reverse the string")) {
+    return code.includes("[::-1]") || code.includes("reverse");
+  }
+  if (cleanTitle.includes("sum of list") || cleanTitle.includes("sum of elements")) {
+    return code.includes("sum(") || code.includes("+") || code.includes("+= ");
+  }
+  if (cleanTitle.includes("count the characters")) {
+    return code.includes("len(");
+  }
+  if (cleanTitle.includes("palindrome of string")) {
+    return code.includes("==") && (code.includes("[::-1]") || code.includes("reverse"));
+  }
+  if (cleanTitle.includes("lowercase to uppercase") && cleanTitle.includes("without")) {
+    return !code.includes(".upper()") && (code.includes("ord(") || code.includes("chr(") || code.includes("- 32") || code.includes("-32"));
+  }
+  if (cleanTitle.includes("lowercase to uppercase")) {
+    return code.includes(".upper()");
+  }
+  if (cleanTitle.includes("count the number of words")) {
+    return code.includes(".split") && code.includes("len(");
+  }
+  if (cleanTitle.includes("alternate character removal")) {
+    return code.includes("[::2]");
+  }
+  if (cleanTitle.includes("character frequency winner")) {
+    return code.includes("count") || code.includes("max") || code.includes("dict") || code.includes("frequency");
+  }
+  if (cleanTitle.includes("mirror word")) {
+    return code.includes("==") && (code.includes("[::-1]") || code.includes("reverse"));
+  }
+  if (cleanTitle.includes("word weight")) {
+    return code.includes(".split") && code.includes("len(");
+  }
+  if (cleanTitle.includes("special character filter")) {
+    return code.includes("not") || code.includes("isalnum") || code.includes("isalpha") || code.includes("isdigit");
+  }
+  if (cleanTitle.includes("find the largest number")) {
+    return code.includes("max(") || code.includes(">") || code.includes("sort(");
+  }
+  if (cleanTitle.includes("print only even")) {
+    return code.includes("%") && code.includes("2") && code.includes("0");
+  }
+  if (cleanTitle.includes("count of even and odd")) {
+    return code.includes("%") && code.includes("2") && code.includes("0");
+  }
+  if (cleanTitle.includes("reverse the elements")) {
+    return code.includes("[::-1]") || code.includes("reverse");
+  }
+  if (cleanTitle.includes("sum of positive and negative")) {
+    return code.includes(">") && code.includes("<");
+  }
+  if (cleanTitle.includes("count and sum of positive")) {
+    return code.includes(">") && code.includes("<");
+  }
+  if (cleanTitle.includes("count the numbers in a string")) {
+    return code.includes("isdigit") || code.includes("isnumeric") || code.includes("len(");
+  }
+  if (cleanTitle.includes("count the special characters")) {
+    return code.includes("not") || code.includes("isalnum") || code.includes("isalpha") || code.includes("isdigit");
+  }
+  if (cleanTitle.includes("remove duplicate")) {
+    return code.includes("set") || code.includes("not in") || code.includes("dict.fromkeys");
+  }
+  if (cleanTitle.includes("toggle case")) {
+    return code.includes("swapcase") || code.includes("isupper") || code.includes("islower");
+  }
+  if (cleanTitle.includes("replace space")) {
+    return code.includes("replace") || (code.includes("split") && code.includes("join"));
+  }
+  
+  return true; // Generic fallback
+}
+
 interface PageProps {
   params: Promise<{ reportId: string }>;
 }
@@ -219,20 +303,108 @@ export default function ReportDetailsPage({ params }: PageProps) {
     setIsLoading(false);
   }, [reportId]);
 
+  // Dynamic primary assessment selection
+  const { primaryAssessment, primaryAssessmentId } = React.useMemo(() => {
+    let bestId = "1";
+    if (examSessions.length > 0) {
+      const counts: Record<string, number> = {};
+      examSessions.forEach(s => {
+        counts[s.assessmentId] = (counts[s.assessmentId] || 0) + 1;
+      });
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      if (sorted[0]?.[0]) {
+        bestId = sorted[0][0];
+      }
+    } else {
+      const activeOrCompleted = assessments.find(a => a.status === "Completed" || a.status === "Active");
+      if (activeOrCompleted) {
+        bestId = activeOrCompleted.id;
+      } else if (assessments[0]?.id) {
+        bestId = assessments[0].id;
+      }
+    }
+
+    const found = assessments.find(a => a.id === bestId) || {
+      id: bestId,
+      name: "Data Structures Practical Lab Exam",
+      subject: "CS201",
+      duration: 180,
+      questionsCount: 3,
+      assignedCount: 132,
+      status: "Active" as const,
+      createdDate: "2026-06-15",
+      date: "June 17, 2026"
+    };
+
+    return { primaryAssessment: found, primaryAssessmentId: bestId };
+  }, [assessments, examSessions]);
+
   // Dynamic selector logic to remove static mock data
   const studentsWithScores = React.useMemo(() => {
-    const primaryAssessmentId = assessments[0]?.id || "1";
     return students.map((s) => {
       const isSuspended = s.status === "Suspended";
-      const hash = s.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
       
       const session = examSessions.find(
         (es) => es.studentRoll === s.roll && es.assessmentId === primaryAssessmentId
       );
 
       const hasSubmitted = session && session.submittedAt;
-      const score = isSuspended ? 0 : (hasSubmitted ? Math.round(30 + (hash % 20)) : null);
       const statusStr = isSuspended ? "Suspended" : (session ? (session.submittedAt ? "SUBMITTED" : "IN PROGRESS") : "NOT ATTEMPTED");
+
+      // Resolve questions for this student's session
+      let questionIds: string[] = [];
+      try {
+        questionIds = session ? JSON.parse(session.questionOrder) : ["15", "21", "9", "8", "18"];
+      } catch (e) {
+        questionIds = ["15", "21", "9", "8", "18"];
+      }
+
+      const resolved = questionIds.map((id, index) => {
+        return questions.find(q => q.id === id) || defaultQuestionsList[id] || {
+          id,
+          title: id === "15" ? "Count of Even and Odd Numbers" :
+                 id === "21" ? "Remove Duplicate Characters" :
+                 id === "9" ? "Mirror Word Check" :
+                 id === "8" ? "Character Frequency Winner" :
+                 id === "18" ? "Count and Sum of Positive and Negative Numbers" : `Assessment Question ${index + 1}`,
+          marks: 10
+        };
+      });
+
+      // Check if student has actual attempts in localStorage
+      let hasActualSubmissions = false;
+      const studentAttempts = resolved.map(q => {
+        const key = `examcoder_code_${s.roll}_${primaryAssessmentId}_${q.id}`;
+        const localCode = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+        
+        const isAttempted = localCode !== null && localCode.trim() !== "" && 
+                            localCode.replace(/\s/g, "") !== `#Language:Python3.10defsolve():passsolve()`.replace(/\s/g, "") &&
+                            localCode.replace(/\s/g, "") !== `#Language:Python3.10defsolve():#WriteyourPythoncodeherepasssolve()`.replace(/\s/g, "");
+
+        if (isAttempted) {
+          hasActualSubmissions = true;
+        }
+        return { q, localCode, isAttempted };
+      });
+
+      let score = null;
+      if (isSuspended) {
+        score = 0;
+      } else if (hasActualSubmissions) {
+        let computed = 0;
+        studentAttempts.forEach(({ q, localCode, isAttempted }) => {
+          if (isAttempted) {
+            const isCorrect = isCodeCorrect(q.title || "", localCode || "");
+            if (isCorrect) {
+              computed += (q.marks || 10);
+            }
+          }
+        });
+        score = computed;
+      } else if (hasSubmitted) {
+        const hash = s.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        score = Math.round(30 + (hash % 20));
+      }
 
       return { ...s, score, statusStr };
     }).sort((a, b) => {
@@ -240,29 +412,25 @@ export default function ReportDetailsPage({ params }: PageProps) {
       if (b.score === null) return -1;
       return b.score - a.score;
     });
-  }, [students, examSessions, assessments]);
+  }, [students, examSessions, assessments, questions, primaryAssessmentId]);
 
   const dynamicQuestions = React.useMemo(() => {
     return questions.map((q) => {
       // Find sessions where students actually submitted the assessment containing this question
-      const totalSubmissions = examSessions.filter(es => es.submittedAt).length;
+      const totalSubmissions = examSessions.filter(es => es.submittedAt && es.assessmentId === primaryAssessmentId).length;
       
       const attempts = totalSubmissions;
       let correct = 0;
       let incorrect = 0;
       
-      // Calculate from student performance
-      const submittedStudents = students.filter(s => {
-        const hasSession = examSessions.some(es => es.studentRoll === s.roll && es.submittedAt);
-        return hasSession && s.status !== "Suspended";
-      });
+      // Calculate from student performance using mapped actual scores
+      const submittedStudents = studentsWithScores.filter(s => s.statusStr === "SUBMITTED");
       
       const submittedCount = submittedStudents.length;
       if (submittedCount > 0) {
         let totalPct = 0;
         submittedStudents.forEach(s => {
-          const hash = s.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-          const score = Math.round(30 + (hash % 20));
+          const score = s.score ?? 0;
           totalPct += (score / 50);
         });
         const avgPct = totalPct / submittedCount;
@@ -294,7 +462,7 @@ export default function ReportDetailsPage({ params }: PageProps) {
         };
       }
     });
-  }, [questions, students, examSessions]);
+  }, [questions, examSessions, studentsWithScores, primaryAssessmentId]);
 
   const dynamicSections = React.useMemo(() => {
     const sectionsMap: Record<string, typeof studentsWithScores> = {};
@@ -337,11 +505,9 @@ export default function ReportDetailsPage({ params }: PageProps) {
       
       let passedCount = 0;
       sessions.forEach(es => {
-        const student = students.find(s => s.roll === es.studentRoll);
+        const student = studentsWithScores.find(s => s.roll === es.studentRoll);
         if (student) {
-          const isSuspended = student.status === "Suspended";
-          const hash = student.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-          const score = isSuspended ? 0 : Math.round(30 + (hash % 20));
+          const score = student.score ?? 0;
           if (score >= 25) {
             passedCount++;
           }
@@ -360,7 +526,7 @@ export default function ReportDetailsPage({ params }: PageProps) {
         obeIndex
       };
     });
-  }, [assessments, students, examSessions]);
+  }, [assessments, students, examSessions, studentsWithScores]);
 
   const dynamicAtRisk = React.useMemo(() => {
     return studentsWithScores
@@ -538,16 +704,6 @@ export default function ReportDetailsPage({ params }: PageProps) {
     );
   }
 
-  // Derived mock variables for templates
-  const primaryAssessment = assessments[0] || {
-    name: "Data Structures Practical Lab Exam",
-    subject: "CS201",
-    duration: 180,
-    questionsCount: 3,
-    assignedCount: 132,
-    date: "June 17, 2026"
-  };
-
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-xs text-slate-800 antialiased">
       <style dangerouslySetInnerHTML={{__html: `
@@ -644,66 +800,121 @@ export default function ReportDetailsPage({ params }: PageProps) {
 
               // 2. Calculate student outcomes and metrics in a single pass
               const isSuspended = studentItem.status === "Suspended";
-              const hash = studentItem.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-              const baseMarks = isSuspended ? 0 : (studentItem.score !== null ? studentItem.score : Math.round(15 + (hash % 35)));
-              const rawAttempted = isSuspended ? 0 : Math.round(1 + (hash % 4));
+              const primaryAssessmentId = assessments[0]?.id || "1";
 
-              let remaining = baseMarks;
-              let correctCount = 0;
-              resolved.forEach((q, idx) => {
-                const qMarks = q.marks || 10;
-                const shouldSkip = (idx === 1 && hash % 2 === 0 && remaining >= qMarks && idx < resolved.length - 1);
-                if (remaining >= qMarks && !shouldSkip) {
-                  remaining -= qMarks;
-                  correctCount++;
-                } else if (remaining >= qMarks && idx === resolved.length - 1) {
-                  remaining -= qMarks;
-                  correctCount++;
-                }
-              });
-
-              const attempted = isSuspended ? 0 : Math.max(rawAttempted, correctCount);
-
-              remaining = baseMarks;
-              let computedMarks = 0;
-              const questionOutcomes = resolved.map((q, idx) => {
-                const qMarks = q.marks || 10;
-                const shouldSkip = (idx === 1 && hash % 2 === 0 && remaining >= qMarks && idx < resolved.length - 1);
+              // Check if the student has actual attempts in localStorage
+              let hasActualSubmissions = false;
+              const studentAttempts = resolved.map(q => {
+                const key = `examcoder_code_${studentItem.roll}_${primaryAssessmentId}_${q.id}`;
+                const localCode = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
                 
-                let attemptedStatus = "No";
-                let result = "N/A";
-                let marksAllocated = 0;
+                const isAttempted = localCode !== null && localCode.trim() !== "" && 
+                                    localCode.replace(/\s/g, "") !== `#Language:Python3.10defsolve():passsolve()`.replace(/\s/g, "") &&
+                                    localCode.replace(/\s/g, "") !== `#Language:Python3.10defsolve():#WriteyourPythoncodeherepasssolve()`.replace(/\s/g, "");
 
-                if (remaining >= qMarks && !shouldSkip) {
-                  remaining -= qMarks;
-                  attemptedStatus = "Yes";
-                  result = "Correct";
-                  marksAllocated = qMarks;
-                  computedMarks += qMarks;
-                } else if (remaining >= qMarks && idx === resolved.length - 1) {
-                  remaining -= qMarks;
-                  attemptedStatus = "Yes";
-                  result = "Correct";
-                  marksAllocated = qMarks;
-                  computedMarks += qMarks;
-                } else if (idx < attempted) {
-                  attemptedStatus = "Yes";
-                  result = "Incorrect";
-                  marksAllocated = 0;
+                if (isAttempted) {
+                  hasActualSubmissions = true;
                 }
-
-                let submittedCode = "";
-                if (attemptedStatus === "Yes") {
-                  const key = `examcoder_code_${studentItem.roll}_${assessments[0]?.id || "1"}_${q.id}`;
-                  submittedCode = (typeof window !== "undefined" && window.localStorage.getItem(key)) || getCodeLogic(q.id || "", q.title || "");
-                }
-
-                return { id: q.id, title: q.title, attempted: attemptedStatus, result, marks: marksAllocated, submittedCode };
+                return { q, localCode, isAttempted };
               });
+
+              let computedMarks = 0;
+              let attempted = 0;
+              let questionOutcomes;
+
+              if (hasActualSubmissions) {
+                questionOutcomes = studentAttempts.map(({ q, localCode, isAttempted }) => {
+                  const qMarks = q.marks || 10;
+                  let attemptedStatus = "No";
+                  let result = "N/A";
+                  let marksAllocated = 0;
+
+                  if (isAttempted) {
+                    attemptedStatus = "Yes";
+                    attempted++;
+                    const isCorrect = isCodeCorrect(q.title || "", localCode || "");
+                    if (isCorrect) {
+                      result = "Correct";
+                      marksAllocated = qMarks;
+                      computedMarks += qMarks;
+                    } else {
+                      result = "Incorrect";
+                      marksAllocated = 0;
+                    }
+                  }
+
+                  return {
+                    id: q.id,
+                    title: q.title,
+                    attempted: attemptedStatus,
+                    result,
+                    marks: marksAllocated,
+                    submittedCode: localCode || ""
+                  };
+                });
+              } else {
+                // Fallback to simulated logic if no actual local submissions exist
+                const hash = studentItem.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                const baseMarks = isSuspended ? 0 : (studentItem.score !== null ? studentItem.score : Math.round(15 + (hash % 35)));
+                const rawAttempted = isSuspended ? 0 : Math.round(1 + (hash % 4));
+
+                let remaining = baseMarks;
+                let correctCount = 0;
+                resolved.forEach((q, idx) => {
+                  const qMarks = q.marks || 10;
+                  const shouldSkip = (idx === 1 && hash % 2 === 0 && remaining >= qMarks && idx < resolved.length - 1);
+                  if (remaining >= qMarks && !shouldSkip) {
+                    remaining -= qMarks;
+                    correctCount++;
+                  } else if (remaining >= qMarks && idx === resolved.length - 1) {
+                    remaining -= qMarks;
+                    correctCount++;
+                  }
+                });
+
+                attempted = isSuspended ? 0 : Math.max(rawAttempted, correctCount);
+
+                remaining = baseMarks;
+                questionOutcomes = resolved.map((q, idx) => {
+                  const qMarks = q.marks || 10;
+                  const shouldSkip = (idx === 1 && hash % 2 === 0 && remaining >= qMarks && idx < resolved.length - 1);
+                  
+                  let attemptedStatus = "No";
+                  let result = "N/A";
+                  let marksAllocated = 0;
+
+                  if (remaining >= qMarks && !shouldSkip) {
+                    remaining -= qMarks;
+                    attemptedStatus = "Yes";
+                    result = "Correct";
+                    marksAllocated = qMarks;
+                    computedMarks += qMarks;
+                  } else if (remaining >= qMarks && idx === resolved.length - 1) {
+                    remaining -= qMarks;
+                    attemptedStatus = "Yes";
+                    result = "Correct";
+                    marksAllocated = qMarks;
+                    computedMarks += qMarks;
+                  } else if (idx < attempted) {
+                    attemptedStatus = "Yes";
+                    result = "Incorrect";
+                    marksAllocated = 0;
+                  }
+
+                  let submittedCode = "";
+                  if (attemptedStatus === "Yes") {
+                    const key = `examcoder_code_${studentItem.roll}_${primaryAssessmentId}_${q.id}`;
+                    submittedCode = (typeof window !== "undefined" && window.localStorage.getItem(key)) || getCodeLogic(q.id || "", q.title || "");
+                  }
+
+                  return { id: q.id, title: q.title, attempted: attemptedStatus, result, marks: marksAllocated, submittedCode };
+                });
+              }
 
               const subTimeRaw = session?.submittedAt ? new Date(session.submittedAt) : new Date();
               const submissionTime = formatDate(subTimeRaw);
 
+              const hash = studentItem.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
               const minutes = Math.round(5 + (hash % 50));
               const seconds = Math.round(hash % 60);
               const timeTaken = `${minutes} min ${seconds} sec`;
