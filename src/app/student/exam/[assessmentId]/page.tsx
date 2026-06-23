@@ -738,6 +738,23 @@ export default function StudentExamWorkspace({ params }: PageProps) {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
+
+    // Save session submit timestamp
+    try {
+      const studentProfile = loadStudentProfile();
+      const studentRoll = studentProfile.roll || "DEMO_STUDENT";
+      const sessions = loadExamSessions();
+      const updated = sessions.map(s => {
+        if (s.studentRoll === studentRoll && s.assessmentId === assessmentId) {
+          return { ...s, submittedAt: new Date().toISOString() };
+        }
+        return s;
+      });
+      saveExamSessions(updated);
+    } catch (e) {
+      console.error("Failed to save exam session submit timestamp:", e);
+    }
+
     alert("Exam submission finalized. Redirecting to student dashboard.");
     router.push("/student/dashboard");
   };

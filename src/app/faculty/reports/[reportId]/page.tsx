@@ -904,20 +904,50 @@ export default function ReportDetailsPage({ params }: PageProps) {
                   let submittedCode = "";
                   if (attemptedStatus === "Yes") {
                     const key = `examcoder_code_${studentItem.roll}_${primaryAssessmentId}_${q.id}`;
-                    submittedCode = (typeof window !== "undefined" && window.localStorage.getItem(key)) || getCodeLogic(q.id || "", q.title || "");
+submittedCode = (typeof window !== "undefined" && window.localStorage.getItem(key)) || getCodeLogic(q.id || "", q.title || "");
                   }
 
                   return { id: q.id, title: q.title, attempted: attemptedStatus, result, marks: marksAllocated, submittedCode };
                 });
               }
 
-              const subTimeRaw = session?.submittedAt ? new Date(session.submittedAt) : new Date();
+              const hash = studentItem.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
+              let subTimeRaw: Date;
+              if (session?.submittedAt) {
+                subTimeRaw = new Date(session.submittedAt);
+              } else {
+                const stableHour = 10 + (hash % 6);
+                const stableMinute = hash % 60;
+                const stableSecond = (hash * 7) % 60;
+                let examDate = new Date();
+                if (assessments[0]?.date) {
+                  const parsed = new Date(assessments[0].date);
+                  if (!isNaN(parsed.getTime())) {
+                    examDate = parsed;
+                  }
+                }
+                examDate.setHours(stableHour, stableMinute, stableSecond, 0);
+                subTimeRaw = examDate;
+              }
               const submissionTime = formatDate(subTimeRaw);
 
-              const hash = studentItem.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-              const minutes = Math.round(5 + (hash % 50));
-              const seconds = Math.round(hash % 60);
-              const timeTaken = `${minutes} min ${seconds} sec`;
+              let timeTaken = "";
+              if (session?.startedAt && session?.submittedAt) {
+                const start = new Date(session.startedAt).getTime();
+                const end = new Date(session.submittedAt).getTime();
+                const diffMs = end - start;
+                if (diffMs > 0) {
+                  const diffMins = Math.floor(diffMs / 60000);
+                  const diffSecs = Math.floor((diffMs % 60000) / 1000);
+                  timeTaken = `${diffMins} min ${diffSecs} sec`;
+                }
+              }
+              if (!timeTaken) {
+                const minutes = Math.round(5 + (hash % 50));
+                const seconds = Math.round(hash % 60);
+                timeTaken = `${minutes} min ${seconds} sec`;
+              }
 
               const metrics = {
                 roll: studentItem.roll,
