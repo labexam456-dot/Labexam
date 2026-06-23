@@ -576,8 +576,10 @@ export default function StudentExamWorkspace({ params }: PageProps) {
           const cleanActual = actual.replace(/['"“”]/g, "").trim().toLowerCase();
           const cleanExpected = expected.replace(/['"“”]/g, "").trim().toLowerCase();
           
-          if (cleanActual === cleanExpected) return true;
+          // 1. Strict match ignoring carriage returns
+          if (cleanActual.replace(/\r/g, "") === cleanExpected.replace(/\r/g, "")) return true;
           
+          // 2. Boolean/Alias matching
           const boolMap: Record<string, string> = {
             "true": "true", "1": "true", "yes": "true", "correct": "true",
             "false": "false", "0": "false", "no": "false", "incorrect": "false"
@@ -586,16 +588,39 @@ export default function StudentExamWorkspace({ params }: PageProps) {
             return true;
           }
           
-          const tokenize = (s: string) => s.replace(/[\[\],]/g, " ").split(/\s+/).filter(Boolean);
-          const tokensActual = tokenize(cleanActual);
-          const tokensExpected = tokenize(cleanExpected);
+          // Helper to split into alphanumeric tokens
+          const toAlphanumericTokens = (s: string) => {
+            return s.toLowerCase().split(/[^a-z0-9]+/i).filter(Boolean);
+          };
+          
+          const tokensActual = toAlphanumericTokens(cleanActual);
+          const tokensExpected = toAlphanumericTokens(cleanExpected);
+          
+          // 3. Alphanumeric token comparison (ignores colons, commas, brackets, extra spaces)
           if (tokensActual.length === tokensExpected.length && tokensActual.length > 0) {
             if (tokensActual.every((t, i) => t === tokensExpected[i])) {
               return true;
             }
           }
           
-          if (cleanActual.includes(cleanExpected) || cleanExpected.includes(cleanActual)) {
+          // 4. Line-by-line comparison ignoring blank lines and punctuation spacing
+          const getLines = (s: string) => s.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+          const linesActual = getLines(cleanActual);
+          const linesExpected = getLines(cleanExpected);
+          
+          if (linesActual.length === linesExpected.length && linesActual.length > 0) {
+            const allLinesMatch = linesActual.every((line, idx) => {
+              const actTokens = toAlphanumericTokens(line);
+              const expTokens = toAlphanumericTokens(linesExpected[idx]);
+              return actTokens.length === expTokens.length && actTokens.every((t, i) => t === expTokens[i]);
+            });
+            if (allLinesMatch) return true;
+          }
+          
+          // 5. Substring matching as fallback
+          const normActual = cleanActual.replace(/\r/g, "");
+          const normExpected = cleanExpected.replace(/\r/g, "");
+          if (normActual.includes(normExpected) || normExpected.includes(normActual)) {
             return true;
           }
           
