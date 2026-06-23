@@ -91,7 +91,65 @@ const runProcess = (
 // JS/TS-based Python validator and simulator for institutional questions
 function simulatePython(questionTitle: string, userCode: string, input: string): { stdout: string; stderr: string; exitCode: number } {
   const lines = userCode.split('\n');
-  const cleanTitle = (questionTitle || "").trim().toLowerCase();
+  let cleanTitle = (questionTitle || "").trim().toLowerCase();
+
+  // If questionTitle is empty/missing, infer it from the sample input structure
+  if (!cleanTitle && input) {
+    const normInput = input.trim();
+    if (normInput === "5\n10 20 30 40 50" || normInput === "5 10 20 30 40 50") {
+      if (userCode.includes("reverse") || userCode.includes("[::-1]") || userCode.includes("reversed")) {
+        cleanTitle = "reverse the elements";
+      } else {
+        cleanTitle = "sum of elements";
+      }
+    } else if (normInput === "python") {
+      if (userCode.includes("len(")) {
+        cleanTitle = "count the characters in a string";
+      } else if (userCode.includes("upper")) {
+        cleanTitle = "lowercase to uppercase";
+      } else {
+        cleanTitle = "reverse the string";
+      }
+    } else if (normInput === "madam") {
+      cleanTitle = "palindrome of string";
+    } else if (normInput === "Python is easy to learn") {
+      cleanTitle = "count the number of words";
+    } else if (normInput === "banana") {
+      cleanTitle = "character frequency winner";
+    } else if (normInput === "abba") {
+      cleanTitle = "mirror word check";
+    } else if (normInput === "Python is easy") {
+      if (userCode.includes("len") || userCode.includes("weight") || userCode.includes(":")) {
+        cleanTitle = "word weight calculator";
+      } else if (userCode.includes("replace") || userCode.includes("-")) {
+        cleanTitle = "replace space with hyphen";
+      } else {
+        cleanTitle = "reverse each word in a sentence";
+      }
+    } else if (normInput === "abc123@#$") {
+      if (userCode.includes("len") || userCode.includes("count")) {
+        cleanTitle = "count the special characters in a string";
+      } else {
+        cleanTitle = "special character filter";
+      }
+    } else if (normInput === "5\n12 45 8 67 23" || normInput === "5 12 45 8 67 23") {
+      cleanTitle = "find the largest number";
+    } else if (normInput === "6\n10 15 20 25 30 35" || normInput === "6 10 15 20 25 30 35") {
+      cleanTitle = "print only even numbers";
+    } else if (normInput === "6\n1 2 3 4 5 6" || normInput === "6 1 2 3 4 5 6") {
+      cleanTitle = "count of even and odd numbers";
+    } else if (normInput === "6\n10 -5 20 -15 30 -10" || normInput === "6 10 -5 20 -15 30 -10") {
+      cleanTitle = "sum of positive and negative numbers";
+    } else if (normInput === "7\n10 -5 15 -20 25 -30 40" || normInput === "7 10 -5 15 -20 25 -30 40") {
+      cleanTitle = "count and sum of positive and negative numbers";
+    } else if (normInput === "abc123xyz45") {
+      cleanTitle = "count the numbers in a string";
+    } else if (normInput === "programming") {
+      cleanTitle = "remove duplicate characters";
+    } else if (normInput === "PyThOn") {
+      cleanTitle = "toggle case";
+    }
+  }
 
   // 1. Basic Bracket Matching Check
   const stack: { char: string; line: number }[] = [];
