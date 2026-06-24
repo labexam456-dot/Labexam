@@ -53,6 +53,7 @@ export default function ReportsDashboardView({ isStandalone = false }: ReportsDa
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterFormat, setFilterFormat] = useState("all");
+  const [selectedSubject, setSelectedSubject] = useState("");
 
   // UI Modals
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -116,6 +117,7 @@ export default function ReportsDashboardView({ isStandalone = false }: ReportsDa
       emailList: "",
       autoGenerate: false
     });
+    setSelectedSubject("");
 
     // Automatically navigate to view details
     router.push(`/faculty/reports/${newReport.id}`);
@@ -199,14 +201,8 @@ export default function ReportsDashboardView({ isStandalone = false }: ReportsDa
 
   // Categories list metadata
   const categoriesList = [
-    { id: "Assessment", title: "Assessment Reports", desc: "Detailed summary statistics, pass margins, and outcomes.", slug: "assessment-report" },
-    { id: "Student", title: "Student Performance", desc: "Rank list of candidate rosters with grades and submission rates.", slug: "student-perf-report" },
-    { id: "Question", title: "Question Analysis", desc: "Success rate, avg time spent, and correctness per problem.", slug: "question-anal-report" },
-    { id: "Batch", title: "Batch Performance", desc: "Class cohort statistics, comparison, and placement eligible metrics.", slug: "batch-perf-report" },
-    { id: "Department", title: "Department Reports", desc: "Overall metrics comparison between sections and classes.", slug: "dept-report" },
-    { id: "Semester", title: "Semester Reports", desc: "Multi-exam trend analysis and curriculum accreditation check.", slug: "semester-report" },
-    { id: "TopPerformers", title: "Top Performers List", desc: "Merit-focused list showcasing rank, roll, and percentage.", slug: "top-performers" },
-    { id: "AtRisk", title: "At-Risk Students", desc: "Flag profiles scoring below 50% threshold with weak topics.", slug: "at-risk-students" }
+    { id: "Assessment", title: "Subject wise", desc: "Detailed summary statistics and performance index grouped by subject.", slug: "subject-wise-report" },
+    { id: "Student", title: "Individual Report", desc: "Comprehensive scorecard and evaluation details for individual students.", slug: "individual-report" }
   ];
 
   // Filters logic
@@ -220,6 +216,8 @@ export default function ReportsDashboardView({ isStandalone = false }: ReportsDa
 
     return matchesSearch && matchesCat && matchesFormat;
   });
+
+  const uniqueSubjects = ["Python", "Java"];
 
   const totalDownloads = reports.reduce((acc, curr) => acc + curr.downloadCount, 0);
 
@@ -325,7 +323,7 @@ export default function ReportsDashboardView({ isStandalone = false }: ReportsDa
               <TrendingUp className="w-4 h-4 text-slate-400" /> Institution Report Templates
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl">
               {categoriesList.map(cat => (
                 <div 
                   key={cat.id} 
@@ -528,18 +526,19 @@ export default function ReportsDashboardView({ isStandalone = false }: ReportsDa
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block font-bold text-slate-650">Report Category</label>
+                  <label className="block font-bold text-slate-650">Select Subject</label>
                   <select 
-                    value={scheduleForm.category}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, category: e.target.value })}
+                    value={selectedSubject}
+                    onChange={(e) => {
+                      setSelectedSubject(e.target.value);
+                      setScheduleForm(prev => ({ ...prev, assessmentId: "" }));
+                    }}
                     className="w-full text-slate-900 border border-slate-250 rounded px-2.5 py-1.5 bg-white focus:outline-hidden"
                   >
-                    <option value="Assessment">Assessment Summary</option>
-                    <option value="Student">Student Performance</option>
-                    <option value="Question">Question Analysis</option>
-                    <option value="Batch">Batch Report</option>
-                    <option value="Department">Department Report</option>
-                    <option value="Semester">Semester Report</option>
+                    <option value="">All Subjects</option>
+                    {uniqueSubjects.map(subj => (
+                      <option key={subj} value={subj}>{subj}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -551,9 +550,21 @@ export default function ReportsDashboardView({ isStandalone = false }: ReportsDa
                     className="w-full text-slate-900 border border-slate-250 rounded px-2.5 py-1.5 bg-white focus:outline-hidden"
                   >
                     <option value="">-- Choose Completed Exam --</option>
-                    {assessments.map(a => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
+                    {assessments
+                      .filter(a => {
+                        if (!selectedSubject) return true;
+                        const subUpper = a.subject.toUpperCase();
+                        if (selectedSubject === "Python") {
+                          return subUpper.includes("PYT") || subUpper.includes("PYTHON");
+                        }
+                        if (selectedSubject === "Java") {
+                          return subUpper.includes("JAV") || subUpper.includes("JAVA");
+                        }
+                        return false;
+                      })
+                      .map(a => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
                   </select>
                 </div>
               </div>

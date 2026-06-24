@@ -707,7 +707,7 @@ export default function ReportDetailsPage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-xs text-slate-800 antialiased">
+    <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-xs text-slate-800 antialiased main-report-container">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           .no-print {
@@ -715,13 +715,36 @@ export default function ReportDetailsPage({ params }: PageProps) {
           }
           .no-print-padding {
             padding: 0 !important;
+            display: block !important;
           }
           body, html {
             background-color: #ffffff !important;
+            display: block !important;
+          }
+          .main-report-container {
+            display: block !important;
+            background-color: #ffffff !important;
+          }
+          .report-print-wrapper {
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: none !important;
+          }
+          .scorecard-container {
+            display: block !important;
+            width: 100% !important;
+            max-width: none !important;
           }
           .scorecard-page {
             page-break-after: always !important;
             break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin-bottom: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
           }
           .question-row {
             break-inside: avoid !important;
@@ -774,11 +797,13 @@ export default function ReportDetailsPage({ params }: PageProps) {
       </header>
 
       {/* The Printable A4 Page Wrapper */}
-      <div className="flex-1 flex justify-center p-0 md:p-8 no-print-padding">
+      <div className="flex-1 flex justify-center p-0 md:p-8 no-print-padding report-print-wrapper">
         
-        {report.category ? (
-          <div className="w-full max-w-[800px] space-y-8">
-            {studentsWithScores.map((studentItem, idx) => {
+        {report.category === "Student" ? (
+          <div className="w-full max-w-[800px] space-y-8 scorecard-container">
+            {studentsWithScores
+              .filter(studentItem => studentItem.statusStr !== "NOT ATTEMPTED")
+              .map((studentItem, idx) => {
               // 1. Resolve exam session questions
               const primaryAssessmentId = primaryAssessment?.id || "1";
               const session = examSessions.find(es => es.studentRoll === studentItem.roll && es.assessmentId === primaryAssessmentId);
@@ -1123,7 +1148,100 @@ export default function ReportDetailsPage({ params }: PageProps) {
                 </p>
               </div>
 
-              {/* TEMPLATE A has been moved to the scorecard print layout above */}
+              {/* ========================================================================= */}
+              {/* TEMPLATE A: ASSESSMENT REPORT */}
+              {(report.category === "Assessment" || report.category === "Semester") && (
+                <div className="space-y-6">
+                  {/* Parameters */}
+                  <div className="bg-slate-50 p-4 border border-slate-200 rounded-lg space-y-3">
+                    <h4 className="font-extrabold text-[9px] tracking-wider uppercase text-slate-450 border-b border-slate-200 pb-1.5">
+                      1. Assessment Parameters
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-6 text-[10px]">
+                      <div>
+                        <span className="text-slate-400 font-semibold block">Evaluation Name:</span>
+                        <span className="font-bold text-slate-900">{primaryAssessment.name}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-semibold block">Subject Code:</span>
+                        <span className="font-bold text-slate-900 font-mono">{primaryAssessment.subject}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-semibold block">Evaluation Date:</span>
+                        <span className="font-bold text-slate-900 font-mono">{primaryAssessment.date}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-semibold block">Duration limit:</span>
+                        <span className="font-bold text-slate-900 font-mono">{primaryAssessment.duration} minutes</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-semibold block">Assigned Candidates:</span>
+                        <span className="font-bold text-slate-900 font-mono">{dynamicSummary.totalStudentsCount} students</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-semibold block">Assessment Marks:</span>
+                        <span className="font-bold text-slate-900 font-mono">50 Points (max)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary Metrics */}
+                  <div className="space-y-3">
+                    <h4 className="font-extrabold text-[9px] tracking-wider uppercase text-slate-450 pb-0.5">
+                      2. Outcome Summary Metrics
+                    </h4>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono">
+                      <div className="border border-slate-200 p-3 rounded text-center">
+                        <span className="text-slate-455 text-[8px] font-bold block uppercase">Pass Rate</span>
+                        <span className="text-lg font-black text-emerald-850 block mt-1">{dynamicSummary.passRate}</span>
+                      </div>
+                      <div className="border border-slate-200 p-3 rounded text-center">
+                        <span className="text-slate-455 text-[8px] font-bold block uppercase">Avg Score</span>
+                        <span className="text-lg font-black text-slate-900 block mt-1">{dynamicSummary.avgScore}</span>
+                      </div>
+                      <div className="border border-slate-200 p-3 rounded text-center">
+                        <span className="text-slate-455 text-[8px] font-bold block uppercase">Highest</span>
+                        <span className="text-lg font-black text-blue-800 block mt-1">{dynamicSummary.highest}</span>
+                      </div>
+                      <div className="border border-slate-200 p-3 rounded text-center">
+                        <span className="text-slate-455 text-[8px] font-bold block uppercase">Lowest</span>
+                        <span className="text-lg font-black text-rose-800 block mt-1">{dynamicSummary.lowest}</span>
+                      </div>
+                      <div className="border border-slate-200 p-3 rounded text-center">
+                        <span className="text-slate-455 text-[8px] font-bold block uppercase">Submit Rate</span>
+                        <span className="text-lg font-black text-slate-900 block mt-1">{dynamicSummary.submitRate}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section performance distributions chart */}
+                  <div className="border border-slate-200 p-4 rounded-lg space-y-3">
+                    <h4 className="font-extrabold text-[9px] tracking-wider uppercase text-slate-450 flex items-center gap-1 pb-1 border-b border-slate-100">
+                      <Building className="w-3.5 h-3.5 text-slate-400" /> Grade Distribution Analysis
+                    </h4>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                      <div className="bg-slate-50/50 p-2.5 rounded border border-slate-150">
+                        <span className="text-[8px] font-bold uppercase text-slate-450 block">Excellent (&gt;=45)</span>
+                        <span className="text-sm font-extrabold text-slate-900 block mt-0.5">{dynamicDistributions.excellent.count} ({dynamicDistributions.excellent.pct}%)</span>
+                      </div>
+                      <div className="bg-slate-50/50 p-2.5 rounded border border-slate-150">
+                        <span className="text-[8px] font-bold uppercase text-slate-450 block">Good (35-44)</span>
+                        <span className="text-sm font-extrabold text-slate-900 block mt-0.5">{dynamicDistributions.good.count} ({dynamicDistributions.good.pct}%)</span>
+                      </div>
+                      <div className="bg-slate-50/50 p-2.5 rounded border border-slate-150">
+                        <span className="text-[8px] font-bold uppercase text-slate-450 block">Satisfactory (25-34)</span>
+                        <span className="text-sm font-extrabold text-slate-900 block mt-0.5">{dynamicDistributions.satisfactory.count} ({dynamicDistributions.satisfactory.pct}%)</span>
+                      </div>
+                      <div className="bg-slate-50/50 p-2.5 rounded border border-rose-150 bg-rose-50/10">
+                        <span className="text-[8px] font-bold uppercase text-rose-600 block">At-Risk (&lt;25)</span>
+                        <span className="text-sm font-extrabold text-rose-800 block mt-0.5">{dynamicDistributions.atRisk.count} ({dynamicDistributions.atRisk.pct}%)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* ========================================================================= */}
               {/* TEMPLATE C: QUESTION ANALYSIS REPORT */}
