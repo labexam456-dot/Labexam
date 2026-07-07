@@ -151,22 +151,43 @@ export default function AssessmentLaunchPad({ params }: PageProps) {
       const activeRoll = studentProfile.roll || "22CSE102";
       setStudentRoll(activeRoll);
 
-      let activeIp = studentProfile.ip || "192.168.12.104";
       const rollMatch = activeRoll.match(/\d+$/);
-      if (rollMatch && activeIp === "192.168.12.104") {
-        activeIp = `192.168.12.${rollMatch[0]}`;
-      }
-      setStudentIp(activeIp);
-
+      const fallbackNodeNum = rollMatch ? (parseInt(rollMatch[0]) % 254 + 1) : 104;
+      const defaultIp = `192.168.12.${fallbackNodeNum}`;
+      
       const collegePrefix = studentProfile.collegeName?.toLowerCase().includes("gouthami") || studentProfile.collegeName?.toLowerCase().includes("gowthami")
         ? "GITMW"
         : "PSG";
-      const nodeNum = rollMatch ? rollMatch[0] : "104";
-      setWorkstationNode(`${collegePrefix}-LAN-NODE-${nodeNum}`);
+      
+      setStudentIp(defaultIp);
+      setWorkstationNode(`${collegePrefix}-LAN-NODE-${fallbackNodeNum}`);
+
+      // Fetch live external IP dynamically from ipify API
+      if (typeof window !== "undefined") {
+        fetch("https://api.ipify.org?format=json")
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.ip) {
+              setStudentIp(data.ip);
+              
+              const userAgent = window.navigator.userAgent.toLowerCase();
+              let osPlatform = "DESKTOP";
+              if (userAgent.includes("win")) osPlatform = "WIN-PC";
+              else if (userAgent.includes("mac")) osPlatform = "MAC-NODE";
+              else if (userAgent.includes("linux")) osPlatform = "LINUX-PC";
+              
+              const ipSegment = data.ip.split(".").pop() || "NODE";
+              setWorkstationNode(`${osPlatform}-LAN-NODE-${ipSegment}`);
+            }
+          })
+          .catch(() => {
+            // Keep default mathematically valid private IP fallbacks if offline
+          });
+      }
 
       // Generate a realistic fullscreen hash dynamically
       const screenDetails = typeof window !== "undefined" ? `${window.screen.width}x${window.screen.height}` : "1920x1080";
-      const hashInput = `${activeRoll}-${activeIp}-${screenDetails}`;
+      const hashInput = `${activeRoll}-${defaultIp}-${screenDetails}`;
       let hash = 0;
       for (let i = 0; i < hashInput.length; i++) {
         hash = (hash << 5) - hash + hashInput.charCodeAt(i);

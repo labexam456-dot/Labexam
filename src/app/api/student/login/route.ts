@@ -58,6 +58,11 @@ export async function POST(request: Request) {
       role: "Student",
     });
 
+    // Extract real client IP from request headers
+    const forwarded = request.headers.get("x-forwarded-for");
+    const realIp = request.headers.get("x-real-ip");
+    const clientIp = forwarded ? forwarded.split(",")[0].trim() : (realIp || "127.0.0.1");
+
     return NextResponse.json({
       status: "success",
       token,
@@ -68,7 +73,7 @@ export async function POST(request: Request) {
         dept: updatedStudent.dept === "CSE" ? "Computer Science" : updatedStudent.dept,
         year: updatedStudent.year,
         section: updatedStudent.section,
-        ip: "192.168.12.104", // Mock IP as in the frontend
+        ip: clientIp,
         collegeName: updatedStudent.collegeName,
       },
     });

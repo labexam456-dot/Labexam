@@ -98,6 +98,7 @@ export default function StudentExamWorkspace({ params }: PageProps) {
   const [timerString, setTimerString] = useState("03:00:00");
   const [candidateInfo, setCandidateInfo] = useState("Aditya Verma (22CSE102)");
   const [nodeName, setNodeName] = useState("PSG-LAN-104");
+  const [clientIp, setClientIp] = useState("Detecting...");
   const [isRunning, setIsRunning] = useState(false);
   const [showConsole, setShowConsole] = useState(true);
   const [consoleOutput, setConsoleOutput] = useState<string[]>([
@@ -115,6 +116,27 @@ export default function StudentExamWorkspace({ params }: PageProps) {
     { id: 2, input: "root = [2,1,3]", expected: "[2,3,1]", status: "unrun", isHidden: false },
     { id: 3, input: "[Hidden System Test Case]", expected: "[Output Verification Hash Verified]", status: "unrun", isHidden: true }
   ]);
+
+  // Fetch live client IP on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      fetch("https://api.ipify.org?format=json")
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.ip) {
+            setClientIp(data.ip);
+            const userAgent = window.navigator.userAgent.toLowerCase();
+            let osPlatform = "DESKTOP";
+            if (userAgent.includes("win")) osPlatform = "WIN-PC";
+            else if (userAgent.includes("mac")) osPlatform = "MAC-NODE";
+            else if (userAgent.includes("linux")) osPlatform = "LINUX-PC";
+            const ipSegment = data.ip.split(".").pop() || "NODE";
+            setNodeName(`${osPlatform}-LAN-${ipSegment}`);
+          }
+        })
+        .catch(() => setClientIp("192.168.12.1"));
+    }
+  }, []);
 
   // Synchronize dynamic lists and parameters on mount/update
   useEffect(() => {
@@ -700,7 +722,7 @@ export default function StudentExamWorkspace({ params }: PageProps) {
               
               <div className="bg-rose-50 border border-rose-250 p-4 rounded font-mono text-[10px] text-rose-800 leading-normal space-y-1">
                 <p className="font-bold uppercase border-b border-rose-200/50 pb-1 mb-1">Violation Logs:</p>
-                <p>• Client IP: 192.168.12.104</p>
+                <p>• Client IP: {clientIp}</p>
                 <p>• Total tab-switch violations: {warningsCount} detected</p>
                 <p>• Action: Sandbox locked, active code files submitted.</p>
               </div>

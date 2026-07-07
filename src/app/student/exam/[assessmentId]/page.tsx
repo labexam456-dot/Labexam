@@ -229,6 +229,19 @@ export default function StudentExamWorkspace({ params }: PageProps) {
   // Fullscreen checking state
   const [isFullscreenActive, setIsFullscreenActive] = useState(true);
 
+  // Live client IP state
+  const [clientIp, setClientIp] = useState("Detecting...");
+
+  // Fetch live client IP on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      fetch("https://api.ipify.org?format=json")
+        .then(res => res.json())
+        .then(data => { if (data && data.ip) setClientIp(data.ip); })
+        .catch(() => setClientIp("192.168.12.1"));
+    }
+  }, []);
+
   // Hydrate exam metadata and questions from localStorage
   useEffect(() => {
     const assessments = loadAssessments();
@@ -1479,7 +1492,7 @@ export default function StudentExamWorkspace({ params }: PageProps) {
               
               <div className="bg-rose-50 border border-rose-250 p-4 rounded font-mono text-[10px] text-rose-800 leading-normal space-y-1">
                 <p className="font-bold uppercase border-b border-rose-200/50 pb-1 mb-1">Violation Logs:</p>
-                <p>• Client IP: 192.168.12.104</p>
+                <p>• Client IP: {clientIp}</p>
                 <p>• Total tab-switch violations: {warningsCount} detected</p>
                 <p>• Action: Sandbox locked, active code files submitted.</p>
               </div>
