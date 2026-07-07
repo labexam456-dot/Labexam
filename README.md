@@ -1,4 +1,7 @@
-This is a [LAB EXAM](https://nextjs.org) project.
+# Secure Programming Assessment Platform (LabExam)
+
+**Deployment URL:** [https://labs-exam-potral-orpin.vercel.app/](https://labs-exam-potral-orpin.vercel.app/)
+**GitHub Repository:** [https://github.com/labexam456-dot/Labexam.git](https://github.com/labexam456-dot/Labexam.git)
 
 ## Getting Started
 
