@@ -13,7 +13,7 @@ import {
   Lock,
   ArrowRight
 } from "lucide-react";
-import { loadAssessments, loadStudents, loadQuestions, loadFacultyProfile, loadStudentProfile } from "@/lib/storage";
+import { loadAssessments, loadStudents, loadQuestions, loadFacultyProfile, loadStudentProfile, loadExamSessions } from "@/lib/storage";
 
 interface LogEntry {
   id: string;
@@ -33,6 +33,7 @@ export default function DashboardMockup({ collegeName }: DashboardMockupProps) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [assessments, setAssessments] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
+  const [examSessions, setExamSessions] = useState<any[]>([]);
 
   const [facultyCollege, setFacultyCollege] = useState(collegeName || "Gouthami Institute of Technology and Management for Women");
 
@@ -42,6 +43,8 @@ export default function DashboardMockup({ collegeName }: DashboardMockupProps) {
       setAssessments(asms);
       const studs = loadStudents();
       setStudents(studs);
+      const sessions = loadExamSessions();
+      setExamSessions(sessions);
 
       if (collegeName) {
         setFacultyCollege(collegeName);
@@ -58,30 +61,67 @@ export default function DashboardMockup({ collegeName }: DashboardMockupProps) {
       }
 
       const active = asms.filter(a => a.status === "Active");
-      if (active.length > 0 && studs.length > 0) {
-        // generate a few dynamic logs
-        const generatedLogs: LogEntry[] = studs.slice(0, 3).map((s, idx) => {
-          const minutesAgo = idx * 4 + 1;
-          const timeStr = `${new Date(Date.now() - minutesAgo * 60000).toTimeString().split(" ")[0].substring(0, 5)}`;
-          
-          const events = [
-            "Switched active browser window / tab",
-            "Code submission verified - Passed expected unit tests",
-            "Established secure websocket session node key"
-          ];
-          
-          const statuses: ("warning" | "success" | "info")[] = ["warning", "success", "info"];
-          
+      const activeAssessmentIds = active.map(e => e.id);
+      
+      const parseLogs = (jsonStr: string | null | undefined): string[] => {
+        if (!jsonStr) return [];
+        try {
+          const parsed = JSON.parse(jsonStr);
+          if (parsed && typeof parsed === 'object') {
+            if (Array.isArray(parsed.warningsLogs)) {
+              return parsed.warningsLogs;
+            }
+          }
+        } catch (e) {}
+        return [];
+      };
+
+      const actualLogs: LogEntry[] = [];
+      let logIdx = 0;
+      studs.forEach(student => {
+        const studentSessions = sessions.filter(es => es.studentRoll === student.roll && activeAssessmentIds.includes(es.assessmentId));
+        studentSessions.forEach(session => {
+          const wLogs = parseLogs(session.codeSubmissions);
+          wLogs.forEach(log => {
+            const parts = log.split(" - ");
+            const timeStr = parts[0] || "";
+            const eventStr = parts[1] || log;
+            let status: "warning" | "critical" | "success" | "info" = "info";
+            if (eventStr.toLowerCase().includes("warning") || eventStr.toLowerCase().includes("tab")) {
+              status = "warning";
+            }
+            if (eventStr.toLowerCase().includes("suspended") || eventStr.toLowerCase().includes("disqualified")) {
+              status = "critical";
+            }
+            actualLogs.push({
+              id: `act-log-${logIdx++}`,
+              time: timeStr,
+              student: student.name,
+              roll: student.roll,
+              event: eventStr,
+              status
+            });
+          });
+        });
+      });
+
+      if (actualLogs.length === 0 && active.length > 0 && studs.length > 0) {
+        const activeSessions = sessions.filter(s => activeAssessmentIds.includes(s.assessmentId));
+        const generatedLogs: LogEntry[] = activeSessions.map((s, idx) => {
+          const studentInfo = studs.find(st => st.roll === s.studentRoll);
+          const timeStr = new Date(s.startedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           return {
             id: `log-${idx}`,
             time: timeStr,
-            student: s.name,
-            roll: s.roll,
-            event: events[idx],
-            status: statuses[idx]
+            student: studentInfo ? studentInfo.name : "Student",
+            roll: s.studentRoll,
+            event: "Workspace session connected successfully",
+            status: "info" as const
           };
         });
-        setLogs(generatedLogs);
+        setLogs(generatedLogs.slice(0, 5));
+      } else {
+        setLogs(actualLogs.slice(0, 5));
       }
     }
   }, [collegeName]);
@@ -89,12 +129,28 @@ export default function DashboardMockup({ collegeName }: DashboardMockupProps) {
   const activeExams = assessments.filter(a => a.status === "Active" || a.status === "In Progress");
   const hasActive = activeExams.length > 0;
   
+  const parseWarnings = (jsonStr: string | null | undefined): number => {
+    if (!jsonStr) return 0;
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && typeof parsed === 'object') {
+        if ('warningsCount' in parsed) {
+          return parsed.warningsCount || 0;
+        }
+      }
+    } catch (e) {}
+    return 0;
+  };
+
+  const activeAssessmentIds = activeExams.map(e => e.id);
+  const activeExamsSessions = examSessions.filter(s => activeAssessmentIds.includes(s.assessmentId));
+
   const totalStudentsCount = hasActive ? activeExams.reduce((sum: number, e: any) => sum + e.assignedCount, 0) : 0;
-  const activeStudentsCount = hasActive ? Math.max(0, totalStudentsCount - (activeExams.length * 5)) : 0;
+  const activeStudentsCount = hasActive ? activeExamsSessions.filter(s => s.submittedAt === null).length : 0;
   const activeStudentsStr = hasActive ? `${activeStudentsCount}/${totalStudentsCount}` : "0/0";
-  const submissionsCount = hasActive ? Math.round(totalStudentsCount * 0.35) : 0;
+  const submissionsCount = hasActive ? activeExamsSessions.filter(s => s.submittedAt !== null).length : 0;
   const submissionsStr = hasActive ? `${submissionsCount}/${totalStudentsCount}` : "0/0";
-  const warningsCount = hasActive ? activeExams.length * 3 : 0;
+  const warningsCount = hasActive ? activeExamsSessions.reduce((sum, s) => sum + parseWarnings(s.codeSubmissions), 0) : 0;
   const remainingTimeStr = hasActive 
     ? (activeExams[0].duration 
         ? `${Math.floor(activeExams[0].duration / 60).toString().padStart(2, '0')}h ${(activeExams[0].duration % 60).toString().padStart(2, '0')}m` 
