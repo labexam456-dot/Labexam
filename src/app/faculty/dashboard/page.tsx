@@ -1511,8 +1511,8 @@ export default function FacultyDashboard() {
                     >
                       <option value="">-- Select Subject --</option>
                       <option value="IT101">Programming in C</option>
-                      <option value="IT102">Python Programming</option>
-                      <option value="IT201">Java Programming</option>
+                      <option value="IT102">Python</option>
+                      <option value="IT201">Java</option>
                     </select>
                   </div>
 

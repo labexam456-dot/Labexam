@@ -287,8 +287,8 @@ export default function CreateAssessment() {
                     >
                       <option value="">-- Select Subject --</option>
                       <option value="IT101">Programming in C</option>
-                      <option value="IT102">Python Programming</option>
-                      <option value="IT201">Java Programming</option>
+                      <option value="IT102">Python</option>
+                      <option value="IT201">Java</option>
                     </select>
                     {errors.subject && <p className="text-rose-600 text-[10px] mt-0.5 font-semibold">{errors.subject}</p>}
                   </div>
